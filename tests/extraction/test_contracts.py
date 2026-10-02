@@ -35,7 +35,19 @@ class TestNormalizedClaim:
         """Test that type_hints rejects internal None values."""
         with pytest.raises(ValidationError):
             NormalizedClaim(type_hints={"entity": None})
+            
+    def test_declared_fields_default_to_none(self):
+        claim = NormalizedClaim()
+        assert (claim.assertion_type, claim.subject_type, claim.object_type) == (None, None, None)
 
+    def test_declared_fields_accept_any_string_unjudged_and_reject_non_strings(self):
+        claim = NormalizedClaim(assertion_type="anything", subject_type="", object_type="X")
+        assert (claim.assertion_type, claim.subject_type, claim.object_type) == ("anything", "", "X")
+
+        for field in ("assertion_type", "subject_type", "object_type"):
+            for bad in (1, True, ["a"], {"a": "b"}):
+                with pytest.raises(ValidationError):
+                    NormalizedClaim(**{field: bad})
 
 class TestDroppedClaim:
     def test_stage_restriction(self):

@@ -112,3 +112,26 @@ class TestStructuralMapping:
             assert "error" in drop.payload_projection
             serialized = json.dumps(drop.payload_projection)
             assert isinstance(serialized, str)
+
+    def test_declared_fields_pass_through_unjudged(self):
+        """Normalization is structural: an unknown kind or blank type is NOT its concern."""
+        result = normalize([
+            {"assertion_type": "banana", "subject_type": "", "predicate": "p"},
+            {"predicate": "p"},
+        ])
+
+        assert isinstance(result, NormalizationSuccess)
+        assert len(result.dropped) == 0
+        first, second = result.claims
+        assert (first.assertion_type, first.subject_type, first.object_type) == ("banana", "", None)
+        assert (second.assertion_type, second.subject_type, second.object_type) == (None, None, None)
+
+    def test_non_string_declared_field_is_a_structural_drop(self):
+        result = normalize([{"assertion_type": 5, "predicate": "p"}])
+
+        assert isinstance(result, NormalizationSuccess)
+        assert len(result.claims) == 0
+        assert len(result.dropped) == 1
+        assert result.dropped[0].stage == "normalization"
+        assert "assertion_type" in result.dropped[0].reason
+        assert result.dropped[0].payload_projection["assertion_type"] == 5        

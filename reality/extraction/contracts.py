@@ -29,7 +29,13 @@ class NormalizedClaim(BaseModel):
     subject_text: Optional[str] = None
     object_text: Optional[str] = None
     predicate: Optional[str] = None
-
+    # Declared by the provider (RFC-004 section 9, A1). Transport only: no
+    # vocabulary, presence or consistency check happens at this boundary;
+    # that is validation's job. Nullable like every other field here.
+    assertion_type: Optional[str] = None
+    subject_type: Optional[str] = None
+    object_type: Optional[str] = None
+    
     # Field itself may be None.
     # Internal keys and values must remain strings.
     type_hints: Optional[Dict[str, str]] = None
