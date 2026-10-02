@@ -91,7 +91,7 @@ def initialize_database() -> None:
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (observation_id) REFERENCES observations(id)
                     ON DELETE CASCADE,
-                UNIQUE (observation_id, assertion_type, subject, predicate, object)
+                                    UNIQUE (observation_id, assertion_type, subject, subject_type, predicate, object, object_type)
             )
         """)
 

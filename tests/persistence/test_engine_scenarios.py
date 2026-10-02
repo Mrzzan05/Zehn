@@ -182,3 +182,43 @@ def test_metadata_never_decides_entity_identity():
     result = engine.process_assertion(assertion)
 
     assert result.subject_entity.entity_type == "Person"
+
+
+def test_same_triple_with_different_subject_types_are_distinct_claims():
+    obs = _obs()
+    person = engine.process_assertion(_assertion(
+        obs.id, "attribute", "Mercury", "k", "v", subject_type="Person"))
+    planet = engine.process_assertion(_assertion(
+        obs.id, "attribute", "Mercury", "k", "v", subject_type="Planet"))
+
+    assert person.assertion.id != planet.assertion.id
+    assert person.subject_entity.id != planet.subject_entity.id
+    assert _count("assertions") == 2
+
+
+def test_same_triple_with_different_object_types_are_distinct_claims():
+    obs = _obs()
+    company = engine.process_assertion(_assertion(
+        obs.id, "relationship", "Sara", "works_at", "Mercury",
+        subject_type="Person", object_type="Company"))
+    planet = engine.process_assertion(_assertion(
+        obs.id, "relationship", "Sara", "works_at", "Mercury",
+        subject_type="Person", object_type="Planet"))
+
+    assert company.assertion.id != planet.assertion.id
+    assert company.object_entity.id != planet.object_entity.id
+    assert company.relationship.id != planet.relationship.id
+    assert _count("relationships") == 2
+    assert _count("entities") == 3  # Sara/Person, Mercury/Company, Mercury/Planet
+
+
+def test_metadata_only_difference_is_a_replay_and_first_metadata_wins():
+    obs = _obs()
+    first = engine.process_assertion(_assertion(
+        obs.id, "attribute", "Sara", "mood", "happy", subject_type="Person", note="first"))
+    second = engine.process_assertion(_assertion(
+        obs.id, "attribute", "Sara", "mood", "happy", subject_type="Person", note="second"))
+
+    assert second.assertion.id == first.assertion.id
+    assert second.assertion.metadata == {"note": "first"}
+    assert _count("assertions") == 1

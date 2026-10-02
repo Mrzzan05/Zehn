@@ -265,15 +265,23 @@ def trace_relationship_to_observation(
     return relationship, assertion, observation
 
 def find_assertion(conn: sqlite3.Connection, assertion: Assertion) -> Optional[Assertion]:
-    """Exact natural-key lookup; used by the engine for idempotency."""
+    """Exact lookup by the 7-field identity key (RFC-004 section 8)."""
     row = conn.execute(
         """
         SELECT * FROM assertions
         WHERE observation_id = ? AND assertion_type = ? AND subject = ?
-          AND predicate = ? AND object = ?
+          AND subject_type = ? AND predicate = ? AND object = ?
+          AND object_type = ?
         """,
-        (assertion.observation_id, assertion.assertion_type,
-         assertion.subject, assertion.predicate, assertion.object),
+        (
+            assertion.observation_id,
+            assertion.assertion_type,
+            assertion.subject,
+            _type_to_db(assertion.subject_type),
+            assertion.predicate,
+            assertion.object,
+            _type_to_db(assertion.object_type),
+        ),
     ).fetchone()
     return _row_to_assertion(row) if row else None
 

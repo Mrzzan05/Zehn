@@ -1,3 +1,5 @@
+import sqlite3
+import pytest
 from reality import repository as repo
 from reality.schemas import Assertion, Entity, Observation, Relationship
 
@@ -103,3 +105,25 @@ def test_metadata_is_stored_but_never_promoted_to_typed_fields(conn):
 
     assert loaded.subject_type is None and loaded.object_type is None
     assert loaded.metadata == hints
+
+
+def test_database_rejects_a_duplicate_identity_key_but_allows_a_different_type(conn):
+    obs = repo.create_observation(conn, Observation(raw_text="x"))
+    repo.create_assertion(conn, _typed_assertion(obs.id))
+
+    # Same 7-field key, different metadata: the database refuses it.
+    with pytest.raises(sqlite3.IntegrityError):
+        repo.create_assertion(conn, _typed_assertion(obs.id, metadata={"other": "meta"}))
+
+    # A different subject type is a different claim: the database accepts it.
+    repo.create_assertion(conn, _typed_assertion(obs.id, subject_type="Robot"))
+
+
+def test_database_uniqueness_holds_when_object_type_is_absent(conn):
+    # NULLs are distinct under UNIQUE; the '' sentinel is what makes this fire.
+    obs = repo.create_observation(conn, Observation(raw_text="x"))
+    attribute = _assertion(obs.id)  # declares no types
+
+    repo.create_assertion(conn, attribute)
+    with pytest.raises(sqlite3.IntegrityError):
+        repo.create_assertion(conn, attribute)    
