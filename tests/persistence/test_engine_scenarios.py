@@ -2,18 +2,27 @@ import pytest
 
 from reality import engine
 from reality.db import transaction
-from reality.engine import UnsupportedAssertionType
 from reality.schemas import Assertion, Observation
+from reality.engine import (
+    AssertionContractViolation,
+    ContradictoryTypeField,
+    MissingTypeField,
+    UnsupportedAssertionType,
+)
 
 
 def _obs(text: str = "x"):
     return engine.process_observation(Observation(raw_text=text))
 
 
-def _assertion(obs_id, kind, subject, predicate, obj, **meta):
+def _assertion(obs_id, kind, subject, predicate, obj, *,
+               subject_type=None, object_type=None, **meta):
     return Assertion(
         observation_id=obs_id, assertion_type=kind,
-        subject=subject, predicate=predicate, object=obj, metadata=meta,
+        subject=subject, subject_type=subject_type,
+        predicate=predicate,
+        object=obj, object_type=object_type,
+        metadata=meta,
     )
 
 
@@ -119,3 +128,57 @@ def test_same_content_from_two_observations_is_not_deduplicated():
 
     assert a1.assertion.id != a2.assertion.id
     assert _count("assertions") == 2
+
+
+@pytest.mark.parametrize(
+    "fields, expected",
+    [
+        pytest.param(
+            dict(assertion_type="attribute"),
+            MissingTypeField, id="attribute-missing-subject-type"),
+        pytest.param(
+            dict(assertion_type="relationship", object_type="Company"),
+            MissingTypeField, id="relationship-missing-subject-type"),
+        pytest.param(
+            dict(assertion_type="relationship", subject_type="Person"),
+            MissingTypeField, id="relationship-missing-object-type"),
+        pytest.param(
+            dict(assertion_type="attribute", subject_type="Person", object_type="Project"),
+            ContradictoryTypeField, id="attribute-declares-object-type"),
+        pytest.param(
+            dict(assertion_type="attribute", metadata={"subject_type": "Person"}),
+            MissingTypeField, id="types-only-in-metadata-are-not-types"),
+    ],
+)
+def test_contract_violation_is_raised_before_any_write(fields, expected):
+    obs = _obs()
+    assertion = Assertion(
+        observation_id=obs.id, subject="Sara", predicate="p", object="o", **fields)
+
+    with pytest.raises(expected):
+        engine.process_assertion(assertion)
+
+    for table in ("assertions", "entities", "relationships"):
+        assert _count(table) == 0
+
+
+def test_contract_violation_hierarchy():
+    for exc in (UnsupportedAssertionType, MissingTypeField, ContradictoryTypeField):
+        assert issubclass(exc, AssertionContractViolation)
+    assert issubclass(AssertionContractViolation, ValueError)
+    assert not issubclass(MissingTypeField, UnsupportedAssertionType)
+    assert not issubclass(ContradictoryTypeField, UnsupportedAssertionType)
+
+
+def test_metadata_never_decides_entity_identity():
+    obs = _obs()
+    assertion = Assertion(
+        observation_id=obs.id, assertion_type="attribute",
+        subject="Mercury", subject_type="Person",
+        predicate="k", object="v",
+        metadata={"subject_type": "Planet"},  # disagrees with the typed field
+    )
+
+    result = engine.process_assertion(assertion)
+
+    assert result.subject_entity.entity_type == "Person"

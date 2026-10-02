@@ -75,9 +75,10 @@ def main() -> None:
             observation_id=obs1.id,
             assertion_type="relationship",
             subject="Mehrsan",
+            subject_type="Person",
             predicate="is_a",
             object="University of California, Los Angeles",
-            metadata={"subject_type": "Person", "object_type": "University"},
+            object_type="University",
         )
     )
     print(f"Assertion created     -> id={result_a.assertion.id}  "
@@ -108,9 +109,9 @@ def main() -> None:
             observation_id=obs2.id,
             assertion_type="attribute",
             subject="Mehrsan",
+            subject_type="Person",
             predicate="work_on",
             object="his project",
-            metadata={"subject_type": "Person", "object_type": "Project"},
         )
     )
     print(f"Assertion created     -> id={result_b.assertion.id}")
@@ -139,9 +140,9 @@ def main() -> None:
             observation_id=obs3.id,
             assertion_type="attribute",
             subject="Mehrsan",
+            subject_type="Person",
             predicate="mood",
             object="happy",
-            metadata={"subject_type": "Person"},
         )
     )
     print(f"Observation -> id={obs3.id}  text={obs3.raw_text!r}")
@@ -153,9 +154,9 @@ def main() -> None:
             observation_id=obs4.id,
             assertion_type="attribute",
             subject="Mehrsan",
+            subject_type="Person",
             predicate="mood",
             object="sad",
-            metadata={"subject_type": "Person", "object_type": "Project"},
         )
     )
     print(f"Observation -> id={obs4.id}  text={obs4.raw_text!r}")
