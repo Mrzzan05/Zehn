@@ -26,13 +26,12 @@ from reality import repository as repo
 from reality.db import transaction
 from reality.schemas import Assertion, Entity, Observation, Relationship
 
-DEFAULT_ENTITY_TYPE = "Unknown"
-
-RELATIONSHIP_ASSERTION_TYPE = "relationship"
-ATTRIBUTE_ASSERTION_TYPE = "attribute"
-SUPPORTED_ASSERTION_TYPES = frozenset(
-    {RELATIONSHIP_ASSERTION_TYPE, ATTRIBUTE_ASSERTION_TYPE}
+from reality.vocabulary import (
+    RELATIONSHIP_ASSERTION_TYPE,
+    SUPPORTED_ASSERTION_TYPES,
 )
+
+DEFAULT_ENTITY_TYPE = "Unknown"
 
 
 class UnsupportedAssertionType(ValueError):
