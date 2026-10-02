@@ -71,7 +71,7 @@ def test_unsupported_assertion_type_is_rejected_before_any_write():
     obs = _obs()
     with pytest.raises(UnsupportedAssertionType):
         engine.process_assertion(
-            _assertion(obs.id, "unclassified", "Sara", "mood", "happy", subject_type="Person")
+            _assertion(obs.id, "banana", "Sara", "mood", "happy", subject_type="Person")
         )
 
     assert _count("assertions") == 0
