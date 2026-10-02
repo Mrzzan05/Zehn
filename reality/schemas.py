@@ -73,10 +73,10 @@ class Assertion(ZehnBaseModel):
  
     id: Optional[int] = None
     observation_id: int  # which Observation this claim came from
-    # Kept as a free string rather than an enum: at this stage we only
-    # have two real categories ("attribute" / "relationship") and new
-    # ones may emerge once real LLM extraction starts. An enum here
-    # would be premature constraint on a still-evolving vocabulary.
+    # The supported vocabulary is closed and defined once, in
+    # reality/vocabulary.py (RFC-004 section 6). This model is deliberately
+    # permissive about it: validation admits and the Engine enforces.
+    # Adding a type requires an RFC amendment.
     assertion_type: str = Field(min_length=1)
     subject: str = Field(min_length=1)
     predicate: str = Field(min_length=1)
@@ -84,6 +84,7 @@ class Assertion(ZehnBaseModel):
     # Free-form extra data (e.g. confidence, raw LLM output, extraction notes).
     # Kept as a flexible dict instead of rigid columns — avoids premature
     # schema design before we know what metadata actually matters.
+    # Inert: no Engine or validation behavior reads it (RFC-004, I-10).
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=utc_now)
  
