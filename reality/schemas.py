@@ -64,6 +64,12 @@ class Assertion(ZehnBaseModel):
         subject="Sarah", predicate="blocked_on", object="graph question"
         subject="Sarah", predicate="participated_in", object="Tuesday meeting"
     """
+    # Entity types (RFC-004 section 9, A3): typed fields, not free-form
+    # metadata. None means "not declared"; a declared type is never blank.
+    # The model stays permissive about presence: enforcement belongs to
+    # validation and the Engine, not to this schema.
+    subject_type: Optional[str] = Field(default=None, min_length=1)
+    object_type: Optional[str] = Field(default=None, min_length=1)
  
     id: Optional[int] = None
     observation_id: int  # which Observation this claim came from

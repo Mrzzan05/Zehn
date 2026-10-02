@@ -75,6 +75,8 @@ def initialize_database() -> None:
         # metadata is stored as a JSON string (SQLite has no native JSON type).
         # ON DELETE CASCADE: if an observation is ever removed, its derived
         # assertions are no longer meaningful and go with it.
+        # subject_type / object_type: '' means "not declared". NULL is never
+        # used because NULLs are distinct under UNIQUE (RFC-004 section 8).
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS assertions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,6 +85,8 @@ def initialize_database() -> None:
                 subject TEXT NOT NULL CHECK (length(trim(subject)) > 0),
                 predicate TEXT NOT NULL CHECK (length(trim(predicate)) > 0),
                 object TEXT NOT NULL CHECK (length(trim(object)) > 0),
+                subject_type TEXT NOT NULL DEFAULT '',
+                object_type TEXT NOT NULL DEFAULT '',
                 metadata TEXT NOT NULL DEFAULT '{}',
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (observation_id) REFERENCES observations(id)

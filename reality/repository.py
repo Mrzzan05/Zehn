@@ -31,14 +31,25 @@ def _row_to_observation(row) -> Observation:
     )
 
 
+def _type_to_db(value: Optional[str]) -> str:
+    """None ("not declared") is stored as '' and never as NULL (RFC-004 section 8)."""
+    return "" if value is None else value
+
+
+def _type_from_db(value: str) -> Optional[str]:
+    return value or None
+
+
 def _row_to_assertion(row) -> Assertion:
     return Assertion(
         id=row["id"],
         observation_id=row["observation_id"],
         assertion_type=row["assertion_type"],
         subject=row["subject"],
+        subject_type=_type_from_db(row["subject_type"]),
         predicate=row["predicate"],
         object=row["object"],
+        object_type=_type_from_db(row["object_type"]),
         metadata=json.loads(row["metadata"]),
         created_at=datetime.fromisoformat(row["created_at"]),
     )
@@ -91,16 +102,18 @@ def create_assertion(conn: sqlite3.Connection, assertion: Assertion) -> Assertio
     cursor = conn.execute(
         """
         INSERT INTO assertions
-            (observation_id, assertion_type, subject, predicate, object,
-             metadata, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+            (observation_id, assertion_type, subject, subject_type, predicate,
+             object, object_type, metadata, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             assertion.observation_id,
             assertion.assertion_type,
             assertion.subject,
+            _type_to_db(assertion.subject_type),
             assertion.predicate,
             assertion.object,
+            _type_to_db(assertion.object_type),
             json.dumps(assertion.metadata),
             assertion.created_at.isoformat(),
         ),
@@ -209,7 +222,8 @@ def trace_relationship_to_observation(
             r.id AS r_id, r.source_entity_id, r.target_entity_id,
             r.relation_type, r.assertion_id, r.created_at AS r_created_at,
             a.id AS a_id, a.observation_id, a.assertion_type,
-            a.subject, a.predicate, a.object, a.metadata,
+            a.subject, a.subject_type, a.predicate, a.object, a.object_type,
+            a.metadata,
             a.created_at AS a_created_at,
             o.id AS o_id, o.raw_text, o.created_at AS o_created_at
         FROM relationships r
@@ -236,8 +250,10 @@ def trace_relationship_to_observation(
         observation_id=row["observation_id"],
         assertion_type=row["assertion_type"],
         subject=row["subject"],
+        subject_type=_type_from_db(row["subject_type"]),
         predicate=row["predicate"],
         object=row["object"],
+        object_type=_type_from_db(row["object_type"]),
         metadata=json.loads(row["metadata"]),
         created_at=datetime.fromisoformat(row["a_created_at"]),
     )
