@@ -17,6 +17,12 @@ from reality.extraction.contracts import (
     ValidationSuccess,
     ValidationRejected
 )
+from reality.classification.exceptions import (
+    ClassificationInternalError,
+    ProviderInvalidResponse,
+    ProviderTimeout,
+    ProviderUnavailable,
+)
 
 
 @pytest.fixture
@@ -174,6 +180,36 @@ class TestPipelineOrchestration:
         with pytest.raises(ExtractionProviderUnavailable, match="No provider configured"):
             extract(valid_observation)
 
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            ProviderUnavailable("down"),
+            ProviderTimeout("slow"),
+            ProviderInvalidResponse("garbled envelope"),
+        ],
+        ids=["unavailable", "timeout", "invalid-response"],
+    )
+    def test_declared_provider_errors_propagate_unchanged(self, mock_get_audit, mock_get_prov, valid_observation, exc):
+        """12. Declared ProviderError subclasses reach the caller as the SAME object (I-25)."""
+        mock_provider = MagicMock()
+        mock_provider.extract.side_effect = exc
+        mock_get_prov.return_value = mock_provider
+
+        with pytest.raises(type(exc)) as caught:
+            extract(valid_observation)
+
+        assert caught.value is exc
+        mock_get_audit.return_value.record.assert_not_called()
+
+    def test_non_provider_classification_errors_are_still_wrapped(self, mock_get_audit, mock_get_prov, valid_observation):
+        """13. Only the declared provider family is exempt; other errors are still Class 6."""
+        mock_provider = MagicMock()
+        mock_provider.extract.side_effect = ClassificationInternalError("not a provider failure")
+        mock_get_prov.return_value = mock_provider
+
+        with pytest.raises(ExtractionInternalError):
+            extract(valid_observation)        
+
     @patch("reality.extraction.pipeline.normalize")
     def test_malformed_normalization_raises_class_3_error(self, mock_normalize, mock_get_audit, mock_get_prov, valid_observation):
         """11. NormalizationMalformed properly maps to ExtractionMalformedOutput (Class 3)."""
@@ -181,3 +217,5 @@ class TestPipelineOrchestration:
         
         with pytest.raises(ExtractionMalformedOutput, match="Payload is entirely invalid"):
             extract(valid_observation)
+
+            

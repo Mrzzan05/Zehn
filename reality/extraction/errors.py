@@ -17,10 +17,13 @@ Exception semantics, as consumed by ``pipeline.extract()``:
   ``NormalizationMalformed`` result, i.e. the provider's raw output could
   not structurally be interpreted as a fragment batch at all.
 - ``ExtractionInternalError``: raised to wrap any unexpected, non-domain
-  exception encountered during orchestration (provider execution errors,
-  audit sink failures, or any other exception not already an
-  ``ExtractionError``), so that callers of ``extract()`` only ever observe
-  a member of this hierarchy.
+  exception encountered during orchestration (undeclared provider execution
+  errors, audit sink failures, or any other exception that is neither an
+  ``ExtractionError`` nor a declared provider failure). Declared provider
+  failures (``reality.classification.exceptions.ProviderError`` and its
+  subclasses) are NOT wrapped: they propagate unchanged so a caller can tell
+  an unavailable or slow provider from a bug (RFC-004 section 13, A7).
+  Relocating that taxonomy to a neutral module is deferred to R1.
 - ``ExtractionError``: the common base class. Callers that wish to catch
   any extraction-domain failure without distinguishing its specific cause
   should catch this class.
@@ -39,12 +42,14 @@ __all__ = [
 
 class ExtractionError(Exception):
     """
-    Base class for all exceptions raised by the extraction pipeline.
+    Base class for all extraction-domain exceptions raised by
+    ``reality.extraction.pipeline.extract()``.
 
-    Every exception raised by ``reality.extraction.pipeline.extract()`` is
-    an instance of this class. Callers that need to handle any extraction
-    failure uniformly, without branching on its specific cause, should
-    catch ``ExtractionError``.
+    Besides this family, ``extract()`` lets exactly two other things through:
+    declared provider failures (the ``ProviderError`` family, RFC-004 A7) and
+    the ``ValueError`` raised by the persistence precondition
+    (``Observation.id`` is ``None``). Callers that need to handle any
+    extraction-domain failure uniformly should catch ``ExtractionError``.
     """
 
 
@@ -83,6 +88,7 @@ class ExtractionInternalError(ExtractionError):
     This includes, but is not limited to: exceptions raised by a
     provider's ``extract()`` call, exceptions raised while resolving a
     provider, and exceptions raised by an audit sink's ``record()`` call.
-    Wrapping guarantees that callers of ``extract()`` never observe a
-    non-``ExtractionError`` exception type escaping the pipeline.
+    Wrapping guarantees that no UNDECLARED exception type escapes the
+    pipeline; the only non-``ExtractionError`` exceptions a caller can observe
+    are the declared ones listed on ``ExtractionError``.
     """

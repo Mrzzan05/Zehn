@@ -1,5 +1,6 @@
 from typing import List
 
+from reality.classification.exceptions import ProviderError
 from reality.schemas import Observation, Assertion
 from reality.extraction.errors import (
     ExtractionError,
@@ -82,7 +83,15 @@ def extract(observation: Observation) -> List[Assertion]:
     except ExtractionError:
         # Existing Class 1-5 extraction exceptions propagate unchanged
         raise
-    
+
+    except ProviderError:
+        # Declared provider failures (unavailable, timeout, invalid response)
+        # propagate unchanged so the caller can distinguish "the provider is
+        # down or slow" from "the pipeline has a bug" (RFC-004 section 13, A7).
+        # Never converted into an empty result (I-25). Only the declared
+        # family is exempt: any other exception is still wrapped below.
+        raise
+
     except Exception as e:
         # Class 6: Wrap unexpected exceptions (KeyError, TypeError, audit failure, etc.)
         raise ExtractionInternalError(
