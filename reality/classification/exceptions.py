@@ -15,8 +15,20 @@ Two different things can go wrong, and they are kept apart on purpose:
   Retrying, failing over or alerting is a decision for the caller
   (orchestration), not for this layer.
 
-Everything the pipeline raises is a ClassificationError.
+The provider-failure family lives in the neutral module
+reality.provider_errors (RFC-004 A10) and is re-exported here, as the same
+objects, for compatibility. It is NOT a ClassificationError: a provider
+capability failing is not the classification subsystem failing.
+
+Everything the pipeline raises is a ClassificationError or a ProviderError.
 """
+
+from reality.provider_errors import (
+    ProviderError,
+    ProviderInvalidResponse,
+    ProviderTimeout,
+    ProviderUnavailable,
+)
 
 __all__ = [
     "ClassificationError",
@@ -29,34 +41,13 @@ __all__ = [
 
 
 class ClassificationError(Exception):
-    """Base class of every exception raised by the classification pipeline."""
-
-
-class ProviderError(ClassificationError):
-    """Base class for failures a provider reports about itself."""
-
-
-class ProviderUnavailable(ProviderError):
-    """The provider could not be reached or refused to serve the request."""
-
-
-class ProviderTimeout(ProviderError):
-    """The provider did not answer within its deadline."""
-
-
-class ProviderInvalidResponse(ProviderError):
-    """
-    The provider got a response but could not produce ANY output value from
-    it (for example a transport-level envelope it cannot read).
-
-    Do not use this for bad CONTENT. If the provider can hand over a value,
-    however wrong, it must return it: the firewall audits it.
-    """
+    """Base class of every exception raised by the classification subsystem."""
 
 
 class ClassificationInternalError(ClassificationError):
     """
-    Wraps any unexpected, non-ClassificationError exception (a bug in a
-    provider, in the normalizer, ...). The original exception is chained as
-    ``__cause__``; its message is deliberately NOT copied into this one.
+    Wraps any unexpected exception that is neither a ClassificationError nor
+    a declared ProviderError (a bug in a provider, in the normalizer, ...).
+    The original exception is chained as ``__cause__``; its message is
+    deliberately NOT copied into this one.
     """

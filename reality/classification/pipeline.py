@@ -1,12 +1,17 @@
-"""
-reality/classification/pipeline.py
-"""
+"""reality/classification/pipeline.py"""
 
-from reality.classification.contracts import ClassificationProvider, ClassificationResult
-from reality.classification.exceptions import ClassificationError, ClassificationInternalError
+from reality.classification.contracts import (
+    ClassificationProvider,
+    ClassificationResult,
+)
+from reality.classification.exceptions import (
+    ClassificationError,
+    ClassificationInternalError,
+)
 from reality.classification.normalization import Clock, normalize_classification, utc_now
 from reality.classification.schemas import ClassificationObservation
 from reality.classification.semantic_rules import apply_semantic_rules
+from reality.provider_errors import ProviderError
 
 
 def classify_observation(
@@ -15,15 +20,15 @@ def classify_observation(
     *,
     clock: Clock = utc_now,
 ) -> ClassificationResult:
-    """
-    Flow: Observation -> ClassificationProvider -> schema firewall
-          (normalize_classification) -> semantic rules -> ClassificationResult
+    """Flow: Observation -> ClassificationProvider -> schema firewall
+
+    (normalize_classification) -> semantic rules -> ClassificationResult
 
     Failure model (see exceptions.py):
       * bad provider OUTPUT  -> audited drop inside the result, never an exception;
-      * provider FAILURE     -> a ClassificationError subclass raised by the
-        provider (ProviderUnavailable, ProviderTimeout, ...) propagates
-        unchanged; the caller decides about retry / failover / alerting;
+      * provider FAILURE     -> a ProviderError or ClassificationError subclass
+        raised by the provider propagates unchanged; the caller decides about
+        retry / failover / alerting;
       * anything unexpected  -> ClassificationInternalError, chained from the
         original. Its message carries only the exception TYPE, never the
         original message, so provider internals cannot leak through it.
@@ -38,6 +43,10 @@ def classify_observation(
         )
         return apply_semantic_rules(result, clock=clock)
     except ClassificationError:
+        raise
+    except ProviderError:
+        # ProviderError is not a ClassificationError (RFC-004 A10), so the
+        # pass-through of declared provider failures must be explicit.
         raise
     except Exception as exc:
         raise ClassificationInternalError(

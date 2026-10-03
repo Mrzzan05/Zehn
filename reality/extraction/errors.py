@@ -20,10 +20,9 @@ Exception semantics, as consumed by ``pipeline.extract()``:
   exception encountered during orchestration (undeclared provider execution
   errors, audit sink failures, or any other exception that is neither an
   ``ExtractionError`` nor a declared provider failure). Declared provider
-  failures (``reality.classification.exceptions.ProviderError`` and its
-  subclasses) are NOT wrapped: they propagate unchanged so a caller can tell
-  an unavailable or slow provider from a bug (RFC-004 section 13, A7).
-  Relocating that taxonomy to a neutral module is deferred to R1.
+  failures (``reality.provider_errors.ProviderError`` and its subclasses)
+  are NOT wrapped: they propagate unchanged so a caller can tell an
+  unavailable or slow provider from a bug (RFC-004 section 13, A7, A10).
 - ``ExtractionError``: the common base class. Callers that wish to catch
   any extraction-domain failure without distinguishing its specific cause
   should catch this class.

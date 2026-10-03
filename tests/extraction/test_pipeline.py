@@ -17,8 +17,8 @@ from reality.extraction.contracts import (
     ValidationSuccess,
     ValidationRejected
 )
-from reality.classification.exceptions import (
-    ClassificationInternalError,
+from reality.classification.exceptions import ClassificationInternalError
+from reality.provider_errors import (
     ProviderInvalidResponse,
     ProviderTimeout,
     ProviderUnavailable,

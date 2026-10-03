@@ -125,7 +125,7 @@ class TestFailureModel:
         assert issubclass(ProviderUnavailable, ProviderError)
         assert issubclass(ProviderTimeout, ProviderError)
         assert issubclass(ProviderInvalidResponse, ProviderError)
-        assert issubclass(ProviderError, ClassificationError)
+        assert not issubclass(ProviderError, ClassificationError)
         assert issubclass(ClassificationInternalError, ClassificationError)
         assert not issubclass(ClassificationInternalError, ProviderError)
 

@@ -1,6 +1,6 @@
 from typing import List
 
-from reality.classification.exceptions import ProviderError
+from reality.provider_errors import ProviderError
 from reality.schemas import Observation, Assertion
 from reality.extraction.errors import (
     ExtractionError,
