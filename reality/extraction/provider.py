@@ -4,8 +4,8 @@ reality/extraction/provider.py
 Defines the structural interface (``Protocol``) that every extraction
 provider must satisfy.
 
-``reality.extraction.pipeline.extract()`` resolves a provider via
-``reality.extraction.provider_lifecycle.get_provider()`` and then calls::
+``reality.extraction.pipeline.extract()`` receives a provider by explicit
+injection and then calls::
 
     raw_output = provider.extract(observation)
 
@@ -16,6 +16,10 @@ returned value is passed directly to
 as ``Any``; this protocol's return type is therefore also ``Any``, since
 the concrete shape of a provider's raw output is not standardized at this
 layer.
+
+A provider either returns a value (however wrong: the firewall audits it)
+or raises a declared failure from ``reality.provider_errors``. It must never
+turn a failure into an empty result.
 
 This module defines the interface only. No concrete provider
 implementation exists here or anywhere in this package.

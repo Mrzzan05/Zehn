@@ -1,33 +1,26 @@
 """
 reality/extraction/audit.py
 
-Owns audit sink lifecycle for the extraction pipeline: which
-``AuditSink`` instance is currently active, how it is registered, and how
-it is cleared.
+Defines the audit sink interface for the extraction pipeline.
 
-``reality.extraction.pipeline.extract()`` consumes this module's
-``get_audit_sink()`` function to resolve a sink at the start of each
-extraction call, and calls ``sink.record(drop)`` for every dropped claim
-produced during normalization or validation. The pipeline must always
-receive a usable sink object; it must never receive ``None``. To
-guarantee this, ``get_audit_sink()`` returns a built-in no-op sink
-(``NullAuditSink``) whenever no sink has been explicitly registered.
+``reality.extraction.pipeline.extract()`` receives a sink by explicit
+injection and calls ``sink.record(drop)`` for every dropped claim produced
+during normalization or validation. There is no module-level registration
+and no default: the caller always chooses the sink (RFC-004 A8). Passing
+``NullAuditSink`` is a deliberate decision to discard audit records, never
+something that happens because a sink was forgotten (I-24).
 
-This module is responsible for exactly one concern: holding and returning
-a reference to the currently active audit sink. It performs no logging
-configuration, no persistence, and no dependency injection.
+A persistent sink belongs to a later milestone (R2) and owns the decision
+about exactly what rejection payload is stored.
 """
 
-from typing import Optional, Protocol
+from typing import Protocol
 
 from reality.extraction.contracts import DroppedClaim
 
 __all__ = [
     "AuditSink",
     "NullAuditSink",
-    "get_audit_sink",
-    "set_audit_sink",
-    "clear_audit_sink",
 ]
 
 
@@ -57,10 +50,8 @@ class NullAuditSink:
     """
     No-op ``AuditSink`` implementation.
 
-    ``record()`` silently ignores every ``DroppedClaim`` it receives and
-    performs no observable work. This is the sink returned by
-    ``get_audit_sink()`` whenever no sink has been explicitly registered,
-    guaranteeing that the pipeline always has a usable sink to call.
+    ``record()`` silently ignores every ``DroppedClaim`` it receives. It must
+    be passed explicitly: nothing in the pipeline falls back to it.
     """
 
     def record(self, drop: DroppedClaim) -> None:
@@ -71,48 +62,3 @@ class NullAuditSink:
             drop: The ``DroppedClaim`` to ignore.
         """
         pass
-
-
-_default_sink: AuditSink = NullAuditSink()
-_sink: Optional[AuditSink] = None
-
-
-def get_audit_sink() -> AuditSink:
-    """
-    Return the currently active audit sink.
-
-    Returns:
-        The ``AuditSink`` instance most recently passed to
-        ``set_audit_sink()``, or a shared ``NullAuditSink`` instance if
-        no sink has been registered. This function never returns
-        ``None``.
-    """
-    if _sink is None:
-        return _default_sink
-    return _sink
-
-
-def set_audit_sink(sink: AuditSink) -> None:
-    """
-    Register ``sink`` as the currently active audit sink.
-
-    Args:
-        sink: An ``AuditSink``-conforming instance to register. This
-            function does not validate, call, or otherwise inspect the
-            sink; it only stores the reference.
-
-    Replaces any previously registered sink.
-    """
-    global _sink
-    _sink = sink
-
-
-def clear_audit_sink() -> None:
-    """
-    Clear the currently registered audit sink, if any.
-
-    After this call, ``get_audit_sink()`` reverts to returning the
-    default ``NullAuditSink`` instance.
-    """
-    global _sink
-    _sink = None

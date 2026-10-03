@@ -1,65 +1,73 @@
 from typing import List
 
-from reality.provider_errors import ProviderError
-from reality.schemas import Observation, Assertion
-from reality.extraction.errors import (
-    ExtractionError,
-    ExtractionMalformedOutput,
-    ExtractionInternalError
-)
-from reality.extraction.audit import get_audit_sink
-from reality.extraction.provider_lifecycle import get_provider
-from reality.extraction.normalization import normalize
-from reality.extraction.validation import validate
+from reality.extraction.audit import AuditSink
 from reality.extraction.contracts import (
     DroppedClaim,
     NormalizationMalformed,
+    ValidationRejected,
     ValidationSuccess,
-    ValidationRejected
 )
+from reality.extraction.errors import (
+    ExtractionError,
+    ExtractionInternalError,
+    ExtractionMalformedOutput,
+)
+from reality.extraction.normalization import normalize
+from reality.extraction.provider import Provider
+from reality.extraction.validation import validate
+from reality.provider_errors import ProviderError
+from reality.schemas import Assertion, Observation
 
 
-def extract(observation: Observation) -> List[Assertion]:
+def extract(
+    observation: Observation,
+    *,
+    provider: Provider,
+    audit_sink: AuditSink,
+) -> List[Assertion]:
     """
     Executes the reality extraction pipeline for a given observation.
-    Orchestrates provider invocation, structural normalization, and semantic validation.
+    Orchestrates provider invocation, structural normalization, and semantic
+    validation.
+
+    The provider and the audit sink are injected explicitly and are required
+    (RFC-004 A8, R1-D4): nothing is resolved from module-level state, and a
+    sink is never defaulted, so an unaudited run can only happen when a
+    caller deliberately passes NullAuditSink. Both are keyword-only because
+    they are structurally similar protocols that could be swapped silently.
     """
-    # Step 0: Persistence Precondition (Must happen before ANY other action)
+    # Step 0: Preconditions (must happen before ANY other action)
     if observation.id is None:
         raise ValueError("Observation.id must not be None prior to extraction.")
+    if provider is None:
+        raise ValueError("provider must be injected explicitly (got None).")
+    if audit_sink is None:
+        raise ValueError("audit_sink must be injected explicitly (got None).")
 
     # All unexpected errors beyond this point are wrapped in ExtractionInternalError (Class 6)
     try:
-        # Step 1: Resolve audit sink exactly once
-        audit_sink = get_audit_sink()
-
-        # Step 2: Resolve provider exactly once (strictly local reference)
-        provider = get_provider()
-
-        # Step 3: Call provider (opaque output)
-        # Note: Provider protocol is assumed to expose .extract(). If the frozen protocol 
-        # defines __call__ instead, this should be updated to `provider(observation)`.
+        # Step 1: Call provider (opaque output)
         raw_output = provider.extract(observation)
 
-        # Step 4: Run normalization
+        # Step 2: Run normalization
         norm_result = normalize(raw_output)
 
         if isinstance(norm_result, NormalizationMalformed):
             raise ExtractionMalformedOutput(norm_result.reason)
 
-        # Step 5: Immediately audit normalization drops
+        # Step 3: Immediately audit normalization drops
         for drop in norm_result.dropped:
             audit_sink.record(drop)
 
-        # Step 6: Validation
+        # Step 4: Validation
         assertions: List[Assertion] = []
-        
+
         for claim in norm_result.claims:
             val_result = validate(claim, observation.id)
-            
+
             if isinstance(val_result, ValidationSuccess):
                 assertions.append(val_result.assertion)
-            
+
             elif isinstance(val_result, ValidationRejected):
                 # Construct explicit deterministic dictionary projection of the claim boundary.
                 # Avoids coupling to Pydantic's serialization mechanisms.
@@ -67,17 +75,17 @@ def extract(observation: Observation) -> List[Assertion]:
                     "subject_text": claim.subject_text,
                     "object_text": claim.object_text,
                     "predicate": claim.predicate,
-                    "type_hints": claim.type_hints
+                    "type_hints": claim.type_hints,
                 }
-                
+
                 drop = DroppedClaim(
                     stage="validation",
                     reason=val_result.reason,
-                    payload_projection=projection
+                    payload_projection=projection,
                 )
                 audit_sink.record(drop)
 
-        # Step 7: Return collected Assertions
+        # Step 5: Return collected Assertions
         return assertions
 
     except ExtractionError:
@@ -87,9 +95,9 @@ def extract(observation: Observation) -> List[Assertion]:
     except ProviderError:
         # Declared provider failures (unavailable, timeout, invalid response)
         # propagate unchanged so the caller can distinguish "the provider is
-        # down or slow" from "the pipeline has a bug" (RFC-004 section 13, A7).
-        # Never converted into an empty result (I-25). Only the declared
-        # family is exempt: any other exception is still wrapped below.
+        # down or slow" from "the pipeline has a bug" (RFC-004 section 13,
+        # A7, A10). Never converted into an empty result (I-25). Only the
+        # declared family is exempt: any other exception is still wrapped.
         raise
 
     except Exception as e:
