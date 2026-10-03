@@ -222,3 +222,19 @@ def test_metadata_only_difference_is_a_replay_and_first_metadata_wins():
     assert second.assertion.id == first.assertion.id
     assert second.assertion.metadata == {"note": "first"}
     assert _count("assertions") == 1
+
+def test_failure_during_attribute_application_rolls_everything_back(monkeypatch):
+    """Closes the attribute-path gap: the relationship path already had its rollback test."""
+    obs = _obs()
+
+    def boom(*a, **k):
+        raise RuntimeError("simulated failure")
+
+    monkeypatch.setattr(engine.repo, "update_entity_attributes", boom)
+
+    with pytest.raises(RuntimeError):
+        engine.process_assertion(_assertion(
+            obs.id, "attribute", "Sara", "mood", "happy", subject_type="Person"))
+
+    for table in ("assertions", "entities"):
+        assert _count(table) == 0
