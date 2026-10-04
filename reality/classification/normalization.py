@@ -19,11 +19,11 @@ Resource safety. A provider is untrusted code, so its object graph is too:
     ints (Python's int<->str digit limit), which would crash the whole batch;
   * audit output (preview, error details, error locations) is size-bounded.
 
-The audit snapshot is produced by ``_project`` + ``_snapshot``: separate,
-total, bounded functions. They never influence what is accepted.
+The audit snapshot is produced by reality.bounded_snapshot (``project`` +
+``snapshot``): separate, total, bounded functions shared with other layers
+(RFC-004 R2-D8). They never influence what is accepted.
 """
 
-import hashlib
 import json
 import math
 from datetime import datetime, timezone
@@ -31,11 +31,20 @@ from typing import Callable, Iterable, cast
 
 from pydantic import ValidationError
 
+# The four MAX_PROJECTION_* names are re-exported for compatibility: they
+# moved to reality.bounded_snapshot and are still importable from here.
+from reality.bounded_snapshot import (
+    INT_LIMIT,
+    MAX_PROJECTION_DEPTH,
+    MAX_PROJECTION_ITEMS,
+    MAX_PROJECTION_NODES,
+    MAX_PROJECTION_STR,
+    snapshot,
+)
 from reality.classification.contracts import (
     MAX_DETAIL_LOC_PARTS,
     MAX_DETAIL_TEXT_CHARS,
     MAX_ERROR_DETAILS,
-    MAX_PAYLOAD_PREVIEW_CHARS,
     REASON_CODE_TO_ERROR_TYPE,
     ClassificationReasonCode,
     ClassificationResult,
@@ -56,13 +65,8 @@ __all__ = [
     "MAX_DOMAIN_NODES",
 ]
 
-MAX_PROJECTION_DEPTH = 8
-MAX_PROJECTION_ITEMS = 64
-MAX_PROJECTION_STR = 1024
-MAX_PROJECTION_NODES = 2_000
 MAX_DOMAIN_NODES = 100_000
 _MAX_DOMAIN_DEPTH = 64
-_INT_LIMIT = 2**63
 
 Clock = Callable[[], datetime]
 
@@ -94,7 +98,7 @@ def _walk_domain(value: object, depth: int, budget: list[int]) -> bool:
     if value is None or t is str or t is bool:
         return True
     if t is int:
-        return -_INT_LIMIT < cast(int, value) < _INT_LIMIT
+        return -INT_LIMIT < cast(int, value) < INT_LIMIT
     if t is float:
         return math.isfinite(cast(float, value))
     if t is list or t is tuple:
@@ -110,78 +114,6 @@ def _walk_domain(value: object, depth: int, budget: list[int]) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Audit projection (total: never raises, never calls str()/repr() on input)
-# ---------------------------------------------------------------------------
-
-def _project(value: object, depth: int = 0, budget: list[int] | None = None) -> object:
-    """
-    Bounded, JSON-safe diagnostic projection of untrusted data. Only the exact
-    type name of unknown objects is recorded, so no user-defined code runs.
-    Tuples become lists; long strings, collections, deep and oversized graphs
-    are truncated. For auditing only.
-    """
-    if budget is None:
-        budget = [MAX_PROJECTION_NODES]
-    budget[0] -= 1
-    if budget[0] < 0:
-        return {"truncated": "node_budget"}
-    if depth > MAX_PROJECTION_DEPTH:
-        return {"truncated": "max_depth"}
-
-    t = type(value)
-    if value is None or t is bool:
-        return value
-    if t is int:
-        return value if -_INT_LIMIT < cast(int, value) < _INT_LIMIT else {"int_out_of_range": True}
-    if t is float:
-        f = cast(float, value)
-        return f if math.isfinite(f) else {"non_finite_float": True}
-    if t is str:
-        return cast(str, value)[:MAX_PROJECTION_STR]
-
-    if t is list or t is tuple:
-        items = list(cast("list[object]", value))
-        out_list: list[object] = [
-            _project(v, depth + 1, budget) for v in items[:MAX_PROJECTION_ITEMS]
-        ]
-        if len(items) > MAX_PROJECTION_ITEMS:
-            out_list.append({"truncated_items": len(items) - MAX_PROJECTION_ITEMS})
-        return out_list
-
-    if t is dict:
-        entries = list(cast("dict[object, object]", value).items())
-        out_dict: dict[str, object] = {}
-        for i, (k, v) in enumerate(entries[:MAX_PROJECTION_ITEMS]):
-            key = (
-                cast(str, k)[:MAX_PROJECTION_STR]
-                if type(k) is str
-                else f"<non_string_key_{i}:{type(k).__name__}>"
-            )
-            out_dict[key] = _project(v, depth + 1, budget)
-        if len(entries) > MAX_PROJECTION_ITEMS:
-            out_dict["<truncated_items>"] = len(entries) - MAX_PROJECTION_ITEMS
-        return out_dict
-
-    return {"unserializable_type": t.__qualname__}
-
-
-def _snapshot(payload: object) -> tuple[str, bool, str]:
-    """
-    (preview, truncated, hash) for an untrusted payload.
-
-    ensure_ascii=True makes the canonical text pure ASCII, so hashing cannot
-    fail on lone surrogates or other exotic characters. The projection holds
-    only bounded ints, so json.dumps cannot hit the int digit limit.
-    """
-    canonical = json.dumps(
-        _project(payload), sort_keys=True, separators=(",", ":"), ensure_ascii=True
-    )
-    digest = hashlib.sha256(canonical.encode("ascii")).hexdigest()
-    truncated = len(canonical) > MAX_PAYLOAD_PREVIEW_CHARS
-    return canonical[:MAX_PAYLOAD_PREVIEW_CHARS], truncated, digest
-
-
-# ---------------------------------------------------------------------------
 # Drop construction
 # ---------------------------------------------------------------------------
 
@@ -192,7 +124,7 @@ def create_drop(
     details: tuple[ErrorDetail, ...] = (),
     details_omitted: int = 0,
 ) -> DroppedProposal:
-    preview, truncated, digest = _snapshot(payload)
+    preview, truncated, digest = snapshot(payload)
     return DroppedProposal(
         payload_preview=preview,
         payload_truncated=truncated,

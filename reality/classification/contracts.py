@@ -13,6 +13,7 @@ from typing import Final, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from reality.bounded_snapshot import MAX_PAYLOAD_PREVIEW_CHARS
 from reality.classification.schemas import ClassificationObservation, SemanticProposal
 
 ClassificationErrorType = Literal[
@@ -45,7 +46,7 @@ REASON_CODE_TO_ERROR_TYPE: Final[dict[str, ClassificationErrorType]] = {
     "SEMANTIC_RULE_VIOLATION": "SemanticRejection",
 }
 
-MAX_PAYLOAD_PREVIEW_CHARS: Final = 1024
+
 # Audit-size bounds: a hostile payload can trigger thousands of schema errors
 # and put megabytes into an error location (the offending key itself).
 MAX_ERROR_DETAILS: Final = 32
