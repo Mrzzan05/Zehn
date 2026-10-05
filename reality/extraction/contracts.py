@@ -59,7 +59,11 @@ class DroppedClaim(BaseModel):
     # Deterministic JSON-compatible projection.
     # MUST NOT contain raw provider objects.
     payload_projection: Dict[str, JsonValue]
-
+    
+    # Set ONLY by extract(), immediately before a drop reaches an audit sink
+    # (RFC-004 R2-D1). None for drops produced by normalize() and validate():
+    # provenance is anchored by the caller, never derived from provider data.
+    observation_id: Optional[int] = None
 
 class NormalizationSuccess(BaseModel):
     """

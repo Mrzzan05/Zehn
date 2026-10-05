@@ -135,3 +135,12 @@ class TestStructuralMapping:
         assert result.dropped[0].stage == "normalization"
         assert "assertion_type" in result.dropped[0].reason
         assert result.dropped[0].payload_projection["assertion_type"] == 5        
+
+    def test_normalization_drops_are_never_stamped_with_an_observation(self):
+        result = normalize([42, {"predicate": "is_a", "confidence": 0.9}, {"observation_id": 5}])
+
+        assert isinstance(result, NormalizationSuccess)
+        assert len(result.dropped) == 3
+        assert all(d.observation_id is None for d in result.dropped)
+        # A provider-supplied key is only ever data inside the projection.
+        assert result.dropped[2].payload_projection == {"observation_id": 5}

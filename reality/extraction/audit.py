@@ -33,6 +33,10 @@ class AuditSink(Protocol):
     method is expected to return ``None`` and, if it raises, the
     exception propagates to the pipeline, which wraps it as an
     ``ExtractionInternalError``.
+
+    Every ``DroppedClaim`` delivered by ``extract()`` carries the persisted
+    Observation's id in ``observation_id`` (RFC-004 R2-D1); a sink may rely
+    on it being set.
     """
 
     def record(self, drop: DroppedClaim) -> None:

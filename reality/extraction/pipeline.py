@@ -19,6 +19,16 @@ from reality.provider_errors import ProviderError
 from reality.schemas import Assertion, Observation
 
 
+def _stamped(drop: DroppedClaim, observation_id: int) -> DroppedClaim:
+    """
+    Return a COPY of ``drop`` carrying the authoritative Observation id
+    (RFC-004 R2-D1). The original is never mutated, and any id it already
+    holds is overwritten: provenance is anchored here by the caller, never
+    taken from the drop or from provider data. The copy is shallow on purpose,
+    so a large hostile projection is not duplicated.
+    """
+    return drop.model_copy(update={"observation_id": observation_id})
+
 def extract(
     observation: Observation,
     *,
@@ -35,6 +45,11 @@ def extract(
     sink is never defaulted, so an unaudited run can only happen when a
     caller deliberately passes NullAuditSink. Both are keyword-only because
     they are structurally similar protocols that could be swapped silently.
+
+    Every drop is delivered to the audit sink as a COPY stamped with
+    ``observation.id`` (RFC-004 R2-D1). ``normalize()`` and ``validate()``
+    stay unaware of the Observation; this function is the provenance
+    authority, and an id already present on a drop is overwritten.
     """
     # Step 0: Preconditions (must happen before ANY other action)
     if observation.id is None:
@@ -57,7 +72,7 @@ def extract(
 
         # Step 3: Immediately audit normalization drops
         for drop in norm_result.dropped:
-            audit_sink.record(drop)
+            audit_sink.record(_stamped(drop, observation.id))
 
         # Step 4: Validation
         assertions: List[Assertion] = []
@@ -83,7 +98,7 @@ def extract(
                     reason=val_result.reason,
                     payload_projection=projection,
                 )
-                audit_sink.record(drop)
+                audit_sink.record(_stamped(drop, observation.id))
 
         # Step 5: Return collected Assertions
         return assertions

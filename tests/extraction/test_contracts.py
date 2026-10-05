@@ -145,4 +145,21 @@ class TestResultTypes:
         dummy_assertion = Assertion.model_construct()
         
         with pytest.raises(ValidationError):
-            ValidationSuccess(assertion=dummy_assertion, extra_field="not allowed")
+            ValidationSuccess(assertion=dummy_assertion, extra_field="not allowed")    
+
+    def test_dropped_claim_observation_id_defaults_to_none_and_accepts_an_int(self):
+        drop = DroppedClaim(stage="normalization", reason="failed", payload_projection={})
+        assert drop.observation_id is None
+
+        stamped = DroppedClaim(
+            stage="validation", reason="failed", payload_projection={}, observation_id=7
+        )
+        assert stamped.observation_id == 7
+
+    def test_dropped_claim_observation_id_is_a_strict_int_or_none(self):
+        for bad in ("1", 1.5, True):
+            with pytest.raises(ValidationError):
+                DroppedClaim(
+                    stage="normalization", reason="failed", payload_projection={},
+                    observation_id=bad,
+                )

@@ -401,3 +401,16 @@ def test_the_orchestrator_never_imports_storage_or_classification():
 
 def test_the_orchestrator_imports_only_its_allowed_public_entry_points():
     assert _imported_modules(ORCHESTRATOR_SOURCE) - ALLOWED_IMPORTS == set()
+
+
+def test_drops_reach_the_sink_stamped_with_the_persisted_observation_id_and_counts_are_unchanged():
+    sink = RecordingSink()
+    claims = [_rel(), "junk", _rel(assertion_type="banana")]
+
+    result = ingest_observation(_obs(), provider=ScriptedProvider(claims), audit_sink=sink)
+
+    assert isinstance(result.observation.id, int)
+    assert (result.normalization_drops, result.validation_drops) == (1, 1)
+    assert [d.stage for d in sink.drops] == ["normalization", "validation"]
+    assert {d.observation_id for d in sink.drops} == {result.observation.id}
+    assert len(result.outcomes) == 1
