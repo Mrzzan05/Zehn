@@ -315,3 +315,67 @@ class TestDropProvenance:
             arg = call.args[0]
             assert isinstance(arg, ast.Call)
             assert isinstance(arg.func, ast.Name) and arg.func.id == "_stamped"
+
+
+class TestValidationDropProjection:
+    """RFC-004 R2-D3: a validation drop's projection preserves what the provider declared."""
+
+    DECLARED_KEYS = {"assertion_type", "subject_type", "object_type"}
+    ORIGINAL_KEYS = {"subject_text", "object_text", "predicate", "type_hints"}
+
+    def test_validation_projection_contains_the_three_declared_fields(self, valid_observation, provider, sink):
+        provider.extract.return_value = [{
+            "assertion_type": "banana",
+            "subject_text": "Sara", "subject_type": "Person",
+            "predicate": "p", "object_text": "o", "object_type": "Company",
+        }]
+
+        result = extract(valid_observation, provider=provider, audit_sink=sink)
+
+        assert result == []
+        sink.record.assert_called_once()
+        drop = sink.record.call_args[0][0]
+        assert drop.stage == "validation"
+        assert set(drop.payload_projection) == self.ORIGINAL_KEYS | self.DECLARED_KEYS
+
+    def test_declared_values_are_copied_verbatim(self, valid_observation, provider, sink):
+        provider.extract.return_value = [{
+            "assertion_type": "Banana",       # wrong case, unsupported kind
+            "subject_text": "Sara", "subject_type": " Person ",  # surrounding spaces
+            "predicate": "p", "object_text": "o", "object_type": "Company",
+            "type_hints": {"note": "x"},
+        }]
+
+        extract(valid_observation, provider=provider, audit_sink=sink)
+
+        projection = sink.record.call_args[0][0].payload_projection
+        assert projection["assertion_type"] == "Banana"
+        assert projection["subject_type"] == " Person "
+        assert projection["object_type"] == "Company"
+        assert projection["subject_text"] == "Sara"
+        assert projection["object_text"] == "o"
+        assert projection["predicate"] == "p"
+        assert projection["type_hints"] == {"note": "x"}
+
+    def test_missing_declarations_are_stored_as_none_not_omitted(self, valid_observation, provider, sink):
+        provider.extract.return_value = [{"subject_text": "Sara", "predicate": "p", "object_text": "o"}]
+
+        extract(valid_observation, provider=provider, audit_sink=sink)
+
+        drop = sink.record.call_args[0][0]
+        assert drop.stage == "validation"
+        for key in self.DECLARED_KEYS:
+            assert key in drop.payload_projection
+            assert drop.payload_projection[key] is None
+        assert drop.payload_projection["type_hints"] is None
+
+    def test_normalization_drop_projections_are_unchanged(self, valid_observation, provider, sink):
+        fragment = {"predicate": "p", "confidence": 0.9}  # extra field: a structural drop
+        provider.extract.return_value = [fragment]
+
+        extract(valid_observation, provider=provider, audit_sink=sink)
+
+        drop = sink.record.call_args[0][0]
+        assert drop.stage == "normalization"
+        assert drop.payload_projection == fragment
+        assert not (self.DECLARED_KEYS & set(drop.payload_projection))    

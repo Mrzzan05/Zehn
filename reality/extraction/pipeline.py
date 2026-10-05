@@ -91,6 +91,11 @@ def extract(
                     "object_text": claim.object_text,
                     "predicate": claim.predicate,
                     "type_hints": claim.type_hints,
+                    # Declared by the provider, copied verbatim (RFC-004 R2-D3).
+                    # None when the claim did not declare the field.
+                    "assertion_type": claim.assertion_type,
+                    "subject_type": claim.subject_type,
+                    "object_type": claim.object_type,
                 }
 
                 drop = DroppedClaim(
