@@ -215,14 +215,19 @@ def test_e6_exhausted_retries_leave_only_the_observation_and_resubmission_is_a_n
 
 
 def test_e7_malformed_provider_output_leaves_only_observations_and_is_not_retried():
-    for bad in ("not a list", {"claims": []}, None, 42):
+    for index, bad in enumerate(("not a list", {"claims": []}, None, 42), start=1):
         provider, sink = ScriptedProvider(bad), RecordingSink()
 
         with pytest.raises(ExtractionMalformedOutput):
             ingest_observation(Observation(raw_text="x"), provider=provider, audit_sink=sink)
 
         assert len(provider.calls) == 1
-        assert sink.drops == []
+        # R2-D13: the malformed root is audited once, stamped with the persisted Observation.
+        assert len(sink.drops) == 1
+        drop = sink.drops[0]
+        assert drop.stage == "normalization"
+        assert drop.observation_id == index
+        assert drop.payload_projection == {"value": bad}
 
     assert _counts() == (4, 0, 0, 0)  # four Observations, no Reality effect
 

@@ -1,5 +1,6 @@
 import importlib.util
 import ast
+import json
 from pathlib import Path
 
 from reality.extraction.normalization import normalize as real_normalize
@@ -378,4 +379,75 @@ class TestValidationDropProjection:
         drop = sink.record.call_args[0][0]
         assert drop.stage == "normalization"
         assert drop.payload_projection == fragment
-        assert not (self.DECLARED_KEYS & set(drop.payload_projection))    
+        assert not (self.DECLARED_KEYS & set(drop.payload_projection)) 
+
+class TestMalformedRootAudit:
+    """RFC-004 R2-D13: a malformed provider root is audited once, then the same exception is raised."""
+
+    @pytest.mark.parametrize(
+        "root, expected_value",
+        [
+            ("not a list", "not a list"),
+            ({"claims": [], "observation_id": 99}, {"claims": [], "observation_id": 99}),
+            (None, None),
+            (("a", "b"), ["a", "b"]),
+        ],
+        ids=["string", "dict-with-provider-observation-id", "none", "tuple"],
+    )
+    def test_a_malformed_root_is_recorded_once_stamped_and_the_same_exception_is_raised(
+        self, valid_observation, provider, sink, root, expected_value
+    ):
+        provider.extract.return_value = root
+
+        with pytest.raises(ExtractionMalformedOutput) as caught:
+            extract(valid_observation, provider=provider, audit_sink=sink)
+
+        sink.record.assert_called_once()
+        drop = sink.record.call_args[0][0]
+        assert drop.stage == "normalization"
+        assert drop.observation_id == 123  # never the provider-supplied 99
+        assert drop.reason == str(caught.value)
+        assert drop.payload_projection == {"value": expected_value}
+
+    @pytest.mark.parametrize("kind", ["huge-string", "cyclic-dict", "huge-dict"])
+    def test_hostile_roots_are_bounded_and_cannot_crash_the_audit(
+        self, valid_observation, provider, sink, kind
+    ):
+        if kind == "huge-string":
+            root = "x" * 100_000
+        elif kind == "cyclic-dict":
+            root = {}
+            root["self"] = root
+        else:
+            root = {f"k{i}": i for i in range(100_000)}
+        provider.extract.return_value = root
+
+        # The malformed-output exception, not an internal error from the audit write.
+        with pytest.raises(ExtractionMalformedOutput):
+            extract(valid_observation, provider=provider, audit_sink=sink)
+
+        sink.record.assert_called_once()
+        projection = sink.record.call_args[0][0].payload_projection
+        assert len(json.dumps(projection)) < 2048
+        if kind == "huge-string":
+            assert len(projection["value"]) == 1024
+        elif kind == "huge-dict":
+            assert len(projection["value"]) == 65  # 64 kept entries + the truncation marker
+            assert projection["value"]["<truncated_items>"] == 99_936
+
+    def test_an_audit_failure_on_the_malformed_path_is_an_internal_error(
+        self, valid_observation, provider, sink
+    ):
+        provider.extract.return_value = "not a list"
+        sink.record.side_effect = RuntimeError("Audit system disk full")
+
+        with pytest.raises(ExtractionInternalError, match="An unexpected internal error occurred"):
+            extract(valid_observation, provider=provider, audit_sink=sink)
+
+        sink.record.assert_called_once()
+
+    def test_a_valid_empty_root_writes_nothing(self, valid_observation, provider, sink):
+        provider.extract.return_value = []
+
+        assert extract(valid_observation, provider=provider, audit_sink=sink) == []
+        sink.record.assert_not_called()

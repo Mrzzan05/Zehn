@@ -1,5 +1,6 @@
 from typing import List
 
+from reality.bounded_snapshot import project
 from reality.extraction.audit import AuditSink
 from reality.extraction.contracts import (
     DroppedClaim,
@@ -50,6 +51,12 @@ def extract(
     ``observation.id`` (RFC-004 R2-D1). ``normalize()`` and ``validate()``
     stay unaware of the Observation; this function is the provenance
     authority, and an id already present on a drop is overwritten.
+
+    A malformed provider root (normalize() returned NormalizationMalformed) is
+    audited exactly once, as a normalization-stage drop whose projection is
+    ``{"value": project(raw_output)}``, before ExtractionMalformedOutput is
+    raised unchanged (RFC-004 R2-D13). If that audit write fails, the failure
+    takes the generic path below and surfaces as ExtractionInternalError.
     """
     # Step 0: Preconditions (must happen before ANY other action)
     if observation.id is None:
@@ -68,6 +75,15 @@ def extract(
         norm_result = normalize(raw_output)
 
         if isinstance(norm_result, NormalizationMalformed):
+            # R2-D13: audit the malformed root exactly once, then raise the
+            # unchanged exception. project() is total and bounded, so a hostile
+            # root cannot make this write fail or bloat the record.
+            malformed = DroppedClaim(
+                stage="normalization",
+                reason=norm_result.reason,
+                payload_projection={"value": project(raw_output)},
+            )
+            audit_sink.record(_stamped(malformed, observation.id))
             raise ExtractionMalformedOutput(norm_result.reason)
 
         # Step 3: Immediately audit normalization drops
