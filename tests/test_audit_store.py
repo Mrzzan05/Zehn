@@ -480,7 +480,11 @@ def test_the_store_imports_only_its_allowlist():
 def test_nothing_else_in_reality_imports_the_store():
     offenders = {}
     for path in REALITY_DIR.rglob("*.py"):
-        if path.name == "audit_store.py":
+        # audit_diagnostics is the one sanctioned reader (R2.6): it imports
+        # only SCHEMA_VERSION and AuditSchemaMismatch, enforced by
+        # test_audit_diagnostics.py. Anything else importing the store is
+        # still a wiring violation.
+        if path.name in ("audit_store.py", "audit_diagnostics.py"):
             continue
         hits = sorted(
             m for m in _imported_modules(path)
